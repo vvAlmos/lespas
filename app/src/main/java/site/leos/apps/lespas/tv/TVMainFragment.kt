@@ -135,7 +135,7 @@ class TVMainFragment: Fragment() {
                                 ),
                                 if (Tools.isRemoteAlbum(this) && cover != coverFileName) "${remoteBasePath}/${name}" else "", coverBaseline
                             ),
-                            name, String.format("%s  -  %s", startDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)), endDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)))
+                            name.replace("/", " • "), String.format("%s  -  %s", startDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)), endDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)))
                         )
                     }
                 }

@@ -262,7 +262,7 @@ class SyncAdapter @JvmOverloads constructor(private val application: Application
                 getUserData(account, application.getString(R.string.nc_userdata_certificate)),
                 "${localBaseFolder}/cache",
                 "LesPas_${application.getString(R.string.lespas_version)}",
-                PreferenceManager.getDefaultSharedPreferences(application).getInt(SettingsFragment.CACHE_SIZE, 800)
+                PreferenceManager.getDefaultSharedPreferences(application).getInt(SettingsFragment.CACHE_SIZE, 256)
             )
         }
 
@@ -1089,6 +1089,26 @@ class SyncAdapter @JvmOverloads constructor(private val application: Application
         }
     }
 
+    private fun collectAlbumFolders(relPath: String, out: MutableList<OkHttpWebDav.DAVResource>) {
+        val listing = webDav.list(if (relPath.isEmpty()) lespasBase else "$lespasBase/$relPath", OkHttpWebDav.FOLDER_CONTENT_DEPTH)
+        val self = listing.first()          // the folder's own id / eTag / modified
+        val children = listing.drop(1)
+
+        // Opt-out marker: an empty ".nomedia" file hides this folder and everything below it
+        if (children.any { it.name == ".nomedia" }) return
+
+        val hasMedia = children.any {
+            !it.isFolder && !it.name.startsWith('.') &&
+            (it.contentType.substringAfter("image/", "") in Tools.SUPPORTED_PICTURE_FORMATS || it.contentType.startsWith("video/", true))
+        }
+        if (relPath.isNotEmpty() && hasMedia) { self.name = relPath; out.add(self) }
+
+        children.filter { it.isFolder && !it.name.startsWith('.') }.forEach { child ->
+            if (relPath.isEmpty() && child.name == ARCHIVE_BASE.drop(1)) return@forEach   // keep the existing "Backup" skip, top level only
+            collectAlbumFolders(if (relPath.isEmpty()) child.name else "$relPath/${child.name}", out)
+        }
+    }
+
     private fun syncRemoteChanges() {
         //Log.e(TAG, "sync remote changes")
         reportStage(Action.SYNC_STAGE_REMOTE)
@@ -1102,7 +1122,9 @@ class SyncAdapter @JvmOverloads constructor(private val application: Application
 
         // Create a changed album list, including all albums modified or created on server except newly created hidden ones
         reportActionStatus(Action.ACTION_COLLECT_REMOTE_CHANGES, " ", " ", " ", " ", System.currentTimeMillis())
-        webDav.list(lespasBase, OkHttpWebDav.FOLDER_CONTENT_DEPTH).drop(1).forEach { remoteAlbum ->     // Drop the first one in the list, which is the parent folder itself
+        //webDav.list(lespasBase, OkHttpWebDav.FOLDER_CONTENT_DEPTH).drop(1).forEach { remoteAlbum ->     // Drop the first one in the list, which is the parent folder itself
+        val remoteAlbums = mutableListOf<OkHttpWebDav.DAVResource>().also { collectAlbumFolders("", it) }
+        remoteAlbums.forEach { remoteAlbum ->
             if (remoteAlbum.isFolder) {
                 // Skip blog folder
                 if (remoteAlbum.name == BLOG_FOLDER || remoteAlbum.name == BLOG_FOLDER.drop(1)) return@forEach
